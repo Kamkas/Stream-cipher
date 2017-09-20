@@ -1,7 +1,7 @@
 import sys
 import datetime
 
-class StreamCipherUtil():
+class StreamCipherUtil:
     def __init__(self, input_file, output_file, key):
         self.key = key
         self.output_file = output_file
@@ -17,57 +17,32 @@ class StreamCipherUtil():
         sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
         sys.stdout.flush()
 
-    def init_s_block(self, key):
-        print_progress = StreamCipherUtil()
-        s_block_arr = list()
-        print("Start initialize S-block ...")
-        for index in range(2 ** 8 - 1):
-            s_block_arr.append(index)
-            print_progress.progress_bar(index, 2 ** 8 - 1)
-        print("Done!")
+    def init_s_block(self):
+        s_block = [num for num in range(256)]
         index_j = 0
-        print("Start swap elements ...")
-        for index in range(2 ** 8 - 1):
-            index_j = (index_j + key[index % len(key)] + s_block_arr[index]) % 2 ** 8
-            s_block_arr[index], s_block_arr[index_j] = s_block_arr[index_j], s_block_arr[index]
-            print_progress.progress_bar(index, 2 ** 8 - 1)
-        print("Done!")
-        return s_block_arr
+        for index_i in range(256):
+            index_j = (index_j + s_block[index_i % len(self.key)]) % 256
+            s_block[index_i], s_block[index_j] = s_block[index_j], s_block[index_i]
+        return s_block
 
-    @staticmethod
-    def gen_pseudo_random_k(s_block_arr):
-        print("Starting generate pseudo-random K word ...")
+    def pseudo_rand_gen(self, text_len, s_block):
+        keystream = list()
         index_i, index_j = 0, 0
-        while True:
-            index_i = (index_i + 1) % 2 ** 8
-            index_j = (index_j + s_block_arr[index_i]) % 2 ** 8
-            s_block_arr[index_i], s_block_arr[index_j] = s_block_arr[index_j], s_block_arr[index_i]
-            k = s_block_arr[(s_block_arr[index_i] + s_block_arr[index_j]) % 2 ** 8]
-            print("Done!")
-            yield k
+        for index_k in range(text_len):
+            index_i = (index_i + 1) % 256
+            index_j = (index_j + s_block[index_i]) % 256
+            s_block[index_i], s_block[index_j] = s_block[index_j], s_block[index_i]
+            keystream.append((s_block[s_block[index_i]] + s_block[index_j]) % 256)
+        return keystream
 
-    def rc4_encrypt(self, text, key):
-        print("Starting RC4 Encryption ...")
-        key = [ord(ch) for ch in key]
-        key_stream = self.gen_pseudo_random_k(self.init_s_block(key))
-        # [ord(ch) ^ next(key_stream) for ch in text]
-        start = datetime.datetime.now()
-        decrypt_text = [ord(ch) ^ next(key_stream) for ch in text]
-        stop = datetime.datetime.now()
-        print("Done!")
-        print("Speed RC4 Encryption is %d char\\/mcs" % (len(text) / (stop.microsecond - start.microsecond)))
-        return decrypt_text
+    def encrypt(self, text):
+        block = self.init_s_block()
+        key_stream = self.pseudo_rand_gen(len(text), block)
+        encrypt_text = [chr(ord(ch) ^ key_stream[index]) for index, ch in enumerate(text)]
+        return encrypt_text
 
-    def rc4_decrypt(self, decrypt_text, key):
-        print("Starting RC4 Decryption ...")
-        key = [ord(ch) for ch in key]
-        key_stream = self.gen_pseudo_random_k(self.init_s_block(key))
-        # [ord(ch) ^ next(key_stream) for ch in text]
-        start = datetime.datetime.now()
-        text = [chr(value ^ next(key_stream)) for value in decrypt_text]
-        stop = datetime.datetime.now()
-        print("Done!")
-        print("Speed RC4 Decryption is %d char\\/mcs" % (len(decrypt_text) / (stop.microsecond - start.microsecond)))
+    def decrypt(self, encrypt_text):
+        text = self.encrypt(encrypt_text)
         return text
 
     def read_from_file(self):
@@ -78,10 +53,14 @@ class StreamCipherUtil():
         return text
 
     def write_to_file(self, text):
-        with open(self.output_file, 'w+') as f:
+        with open(self.output_file, 'w') as f:
             f.write(text)
             f.close()
 
 
 if __name__ == '__main__':
-    
+    s = StreamCipherUtil(key = [ord(ch) for ch in "s6df8s8d6f8s7d68sd68fs6d78s"], input_file="lin_dec", output_file="output")
+    orig_text = s.read_from_file()
+    enc_t = s.encrypt(orig_text)
+    text = s.decrypt(enc_t)
+    s.write_to_file("".join(text))
