@@ -54,11 +54,10 @@ class StreamCipherUtil:
         self.exec_time = stop - start
 
     def read_from_file(self):
-        text = ""
         with open(self.input_file, 'r') as f:
             text = f.read()
             f.close()
-        return text
+            return text
 
     def write_to_file(self, text):
         with open(self.output_file, 'w') as f:
@@ -67,14 +66,25 @@ class StreamCipherUtil:
                 self.text_len += 1
             f.close()
 
-
 if __name__ == '__main__':
-    s = StreamCipherUtil(key=[ord(ch) for ch in "улгтуивтвмбд-41"], input_file="lin_dec",
-                         output_file="output")
-    orig_text = s.read_from_file()
-    enc_t = s.encrypt(orig_text)
-    text = s.decrypt(enc_t)
-    s.write_to_file(text)
-    print(s.text_len)
-    print(s.exec_time)
-    print((s.exec_time.seconds*10**6+s.exec_time.microseconds)/s.text_len)
+    print("RC4 Encryption/Decryption utility.\n")
+    while True:
+        try:
+            mode = int(input("Choose mode: \n1. Encryption\n2. Decryption\nEnter mode: "))
+            input_filename = input("Enter input filename: ")
+            output_filename = input("Enter output filename: ")
+            key = input("Enter key [0-9a-zA-Zа-яА-Я]: ")
+            s = StreamCipherUtil(key=[ord(ch) for ch in key], input_file=input_filename,
+                         output_file=output_filename)
+            data_stream = s.read_from_file()
+            if mode is 1:
+                new_data_stream = s.encrypt(data_stream)
+            elif mode is 2:
+                new_data_stream = s.decrypt(data_stream)
+            s.write_to_file(new_data_stream)
+            print("Time {0} chars/ms".format((s.exec_time.seconds*10**6+s.exec_time.microseconds)/s.text_len))
+        except KeyboardInterrupt:
+            print("\nQuit utility.Bye!\n")
+            break
+        except ValueError as e:
+            print("\nError occured! {0}\n".format(e.args))
