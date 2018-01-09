@@ -1,6 +1,6 @@
 import sys
 import datetime
-
+import os
 
 class StreamCipherUtil:
     def __init__(self, input_file, output_file, key):
@@ -9,6 +9,9 @@ class StreamCipherUtil:
         self.input_file = input_file
         self.exec_time = None
         self.text_len = 0
+        self.bit_stream = self._pm_rand()
+        self.bit_len = 8
+        self.file_text_len = os.stat(self.input_file).st_size
 
     @staticmethod
     def progress_bar(count, total, suffix=''):
@@ -19,62 +22,72 @@ class StreamCipherUtil:
         sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
         sys.stdout.flush()
 
-    def init_s_block(self):
-        s_block = list(range(256))
-        index_j = 0
-        for index_i in range(256):
-            index_j = (index_j + s_block[index_i % len(self.key)]) % 256
-            s_block[index_i], s_block[index_j] = s_block[index_j], s_block[index_i]
-        return s_block
-
-    def pseudo_rand_gen(self, s_block):
-        index_i, index_j = 0, 0
+    def _pm_rand(self):
+        IA = 16807
+        IM = 2147483647
+        a = (2 ** 31 - 1) // 2
+        prev_value = IA * self.hash_key() % IM
+        next_value = 0
         while True:
-            index_i = (index_i + 1) % 256
-            index_j = (index_j + s_block[index_i]) % 256
-            s_block[index_i], s_block[index_j] = s_block[index_j], s_block[index_i]
-            yield ((s_block[s_block[index_i]] + s_block[index_j]) % 256)
+            next_value = IA * prev_value % IM
+            prev_value = next_value
+            if next_value < a + 1:
+                yield '0'
+            else:
+                yield '1'
 
-    def encrypt(self, text):
-        block = self.init_s_block()
-        key_stream = self.pseudo_rand_gen(block)
+    def gen_custom_prng_bit_seq(self):
+        bit_seq = ""
+        for index in range(self.bit_len):
+            bit_seq += next(self.bit_stream)
+        return int(bit_seq, 2)
+
+    def crypt_stream(self, text_stream):
         start = datetime.datetime.now()
-        for index, ch in enumerate(text):
-            yield chr(ord(ch) ^ next(key_stream))
+        for ch in text_stream:
+            yield chr(ord(ch) ^ self.gen_custom_prng_bit_seq())
         stop = datetime.datetime.now()
         self.exec_time = stop - start
 
-    def decrypt(self, encrypt_text):
-        block = self.init_s_block()
-        key_stream = self.pseudo_rand_gen(block)
-        start = datetime.datetime.now()
-        for index, ch in enumerate(encrypt_text):
-            yield chr(ord(ch) ^ next(key_stream))
-        stop = datetime.datetime.now()
-        self.exec_time = stop - start
+    def hash_key(self):
+        import hashlib
+        return int(hashlib.sha256(str(self.key).encode('utf-16')).hexdigest(), 16) % (2 ** 31 - 1)
 
     def read_from_file(self):
         text = ""
-        with open(self.input_file, 'r') as f:
+        with open(self.input_file, 'r', newline='') as f:
             text = f.read()
             f.close()
         return text
 
     def write_to_file(self, text):
-        with open(self.output_file, 'w') as f:
-            for ch in text:
+        with open(self.output_file, 'w', newline='') as f:
+            for index, ch in enumerate(text):
                 f.write(ch)
+                self.progress_bar(index, self.file_text_len)
                 self.text_len += 1
             f.close()
 
-
 if __name__ == '__main__':
-    s = StreamCipherUtil(key=[ord(ch) for ch in "улгтуивтвмбд-41"], input_file="lin_dec",
-                         output_file="output")
-    orig_text = s.read_from_file()
-    enc_t = s.encrypt(orig_text)
-    text = s.decrypt(enc_t)
-    s.write_to_file(text)
-    print(s.text_len)
-    print(s.exec_time)
-    print((s.exec_time.seconds*10**6+s.exec_time.microseconds)/s.text_len)
+    print("RC4 Encryption/Decryption utility.\n")
+    while True:
+        try:
+            mode = int(input("Choose mode: \n1. Encryption\n2. Decryption\nEnter mode: "))
+            input_filename = input("Enter input filename: ")
+            output_filename = input("Enter output filename: ")
+            key = input("Enter key [0-9a-zA-Zа-яА-Я]: ")
+            s = StreamCipherUtil(key=[ord(ch) for ch in key], input_file=input_filename,
+                         output_file=output_filename)
+            data_stream = s.read_from_file()
+            new_data_stream = None
+            if mode is 1:
+                new_data_stream = s.crypt_stream(data_stream)
+            elif mode is 2:
+                new_data_stream = s.crypt_stream(data_stream)
+            s.write_to_file(new_data_stream)
+            print("\nTime {0} chars/ms".format((s.exec_time.seconds*10**6+s.exec_time.microseconds)/s.text_len))
+        except KeyboardInterrupt:
+            print("\nQuit utility.Bye!\n")
+            break
+        except ValueError as e:
+            print("\nError occured! {0}\n".format(e.args))
